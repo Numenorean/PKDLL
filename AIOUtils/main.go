@@ -3,14 +3,12 @@ package main
 import "C"
 
 import (
-	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
-	crand "crypto/rand"
+	"crypto/hmac"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"math/rand"
 	"os"
 	"strconv"
@@ -153,9 +151,8 @@ func encryptAes(keyPtr, ivPtr, dataPtr, modePtr, encodingPtr, noncePtr, tagPtr *
 	}
 	ivB, err := base64DecodeStripped(iv)
 	if err != nil || len(ivB) != 16 {
-		ivB = bytes.Repeat([]byte{0}, 16)
+		ivB = make([]byte, 16)
 	}
-	fmt.Println(ivB, err)
 	dataB, err := base64DecodeStripped(data)
 	if err != nil {
 		return stringToPWideCharPtr(statusErr + err.Error())
@@ -166,7 +163,6 @@ func encryptAes(keyPtr, ivPtr, dataPtr, modePtr, encodingPtr, noncePtr, tagPtr *
 	switch mode {
 	case "ecb":
 		encryptedData, err = AesEncryptEcb(keyB, dataB)
-		//fmt.Printf("Enc: %v\nErr: %s\nKey: %v\nData: %v\n", encryptedData, err, keyB, dataB)
 		if err != nil {
 			return stringToPWideCharPtr(statusErr + err.Error())
 		}
@@ -179,18 +175,16 @@ func encryptAes(keyPtr, ivPtr, dataPtr, modePtr, encodingPtr, noncePtr, tagPtr *
 		encryptedData = make([]byte, len(dataB))
 		mode := cipher.NewCBCEncrypter(block, ivB)
 		mode.CryptBlocks(encryptedData, dataB)
+	// gcm not stable now
 	case "gcm":
 		var nonceB []byte
 		tagB, err := base64DecodeStripped(tag)
 		if err != nil {
-			return stringToPWideCharPtr(statusErr + err.Error())
+			tagB = nil
 		}
 		nonceB, err = base64DecodeStripped(nonce)
-		if err != nil {
-			nonceB := make([]byte, 96)
-			if _, err := io.ReadFull(crand.Reader, nonceB); err != nil {
-				return stringToPWideCharPtr(statusErr + err.Error())
-			}
+		if err != nil || len(nonceB) != 12 {
+			nonceB = make([]byte, 12)
 		}
 
 		block, err := aes.NewCipher(keyB)
@@ -203,33 +197,114 @@ func encryptAes(keyPtr, ivPtr, dataPtr, modePtr, encodingPtr, noncePtr, tagPtr *
 			return stringToPWideCharPtr(statusErr + err.Error())
 		}
 
+		// last 16 bytes - tag
 		encryptedData = aesgcm.Seal(nil, nonceB, dataB, tagB)
 	default:
-		return stringToPWideCharPtr(statusErr + "Not implemented yet")
+		return stringToPWideCharPtr(statusErr + mode + " not implemented yet")
 	}
 
-	switch encoding {
-	case "base64":
-		return stringToPWideCharPtr(statusOK + base64.StdEncoding.EncodeToString(encryptedData))
-	case "hex":
-		//fmt.Println(mode)
-		return stringToPWideCharPtr(statusOK + hex.EncodeToString(encryptedData))
-	default:
-		return stringToPWideCharPtr(statusOK + base64.StdEncoding.EncodeToString(encryptedData))
+	return stringToPWideCharPtr(statusOK + encodeHexBase64Raw(encryptedData, encoding))
+}
+
+//export decryptAes
+func decryptAes(keyPtr, ivPtr, dataPtr, modePtr, encodingPtr *C.wchar_t) (retPtr uintptr) {
+	defer func() {
+		if err := recover(); err != nil {
+			retPtr = stringToPWideCharPtr(statusErr + fmt.Sprintf("%v", err))
+		}
+	}()
+	key := PWideCharPtrToString(keyPtr)
+	iv := PWideCharPtrToString(ivPtr)
+	data := PWideCharPtrToString(dataPtr)
+	mode := PWideCharPtrToString(modePtr)
+	encoding := PWideCharPtrToString(encodingPtr)
+
+	keyB, err := base64DecodeStripped(key)
+	if err != nil {
+		return stringToPWideCharPtr(statusErr + err.Error())
 	}
+	ivB, err := base64DecodeStripped(iv)
+	if err != nil || len(ivB) != 16 {
+		ivB = make([]byte, 16)
+	}
+	dataB, err := base64DecodeStripped(data)
+	if err != nil {
+		return stringToPWideCharPtr(statusErr + err.Error())
+	}
+
+	var decryptedData []byte
+
+	switch mode {
+	case "ecb":
+		decryptedData, err = AesDecryptEcb(keyB, dataB)
+		if err != nil {
+			return stringToPWideCharPtr(statusErr + err.Error())
+		}
+
+		decryptedData, err = PKCS5Trimming(decryptedData)
+		if err != nil {
+			return stringToPWideCharPtr(statusErr + err.Error())
+		}
+	case "cbc":
+		block, err := aes.NewCipher(keyB)
+		if err != nil {
+			return stringToPWideCharPtr(statusErr + err.Error())
+		}
+		decryptedData = make([]byte, len(dataB))
+		mode := cipher.NewCBCDecrypter(block, ivB)
+		mode.CryptBlocks(decryptedData, dataB)
+		decryptedData, err = PKCS5Trimming(decryptedData)
+		if err != nil {
+			return stringToPWideCharPtr(statusErr + err.Error())
+		}
+	default:
+		return stringToPWideCharPtr(statusErr + mode + " not implemented yet")
+	}
+
+	return stringToPWideCharPtr(statusOK + encodeHexBase64Raw(decryptedData, encoding))
+}
+
+//export hashHmac
+func hashHmac(keyPtr, dataPtr, modePtr, encodingPtr, actionPtr *C.wchar_t) uintptr {
+	data := PWideCharPtrToString(dataPtr)
+	mode := PWideCharPtrToString(modePtr)
+	encoding := PWideCharPtrToString(encodingPtr)
+	action := PWideCharPtrToString(actionPtr)
+
+	dataB, err := base64DecodeStripped(data)
+	if err != nil {
+		return stringToPWideCharPtr(statusErr + err.Error())
+	}
+
+	var hashedData []byte
+	h, ok := hashTypes[mode]
+	if !ok {
+		return stringToPWideCharPtr(statusErr + mode + " not implemented yet")
+	}
+
+	switch action {
+	case "hash":
+		hashFunc := h()
+		hashFunc.Write(dataB)
+		hashedData = hashFunc.Sum(nil)
+	case "hmac":
+		key := PWideCharPtrToString(keyPtr)
+		keyB, err := base64DecodeStripped(key)
+		if err != nil {
+			return stringToPWideCharPtr(statusErr + err.Error())
+		}
+
+		mac := hmac.New(h, keyB)
+		mac.Write(dataB)
+		hashedData = mac.Sum(nil)
+	default:
+		return stringToPWideCharPtr(statusErr + "Choose between hash and hmac")
+	}
+
+	return stringToPWideCharPtr(statusOK + encodeHexBase64Raw(hashedData, encoding))
 }
 
 /*
-//export decryptAes
-func decryptAes(keyPtrPtr, ivPtr, dataPtr, modePtr, encodingPtr, noncePtr, tagPtr *C.wchar_t) *C.wchar_t {
-
-}
-
-//export hmacData
-func hmacData(keyPtr, dataPtr, modePtr, encodingPtr *C.wchar_t) *C.wchar_t {
-
-}
-
 //export rsaEncrypt
 func rsaEncrypt(publicKeyPtr, dataPtr, modePtr, encodingPtr *C.wchar_t) *C.wchar_t {
 
