@@ -6,7 +6,6 @@ package main
 import "C"
 
 import (
-	"bytes"
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -34,6 +33,8 @@ var (
 )
 
 func init() {
+	f, _ := os.OpenFile("paniclog.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	redirectStderr(f)
 	hashTypes = map[string]func() hash.Hash{
 		"md5":            md5.New,
 		"md4":            md4.New,
@@ -123,20 +124,6 @@ func base64DecodeStripped(s string) ([]byte, error) {
 	}
 	decoded, err := base64.StdEncoding.DecodeString(s)
 	return decoded, err
-}
-
-func PKCS5Padding(ciphertext []byte, blockSize int, after int) []byte {
-	padding := (blockSize - len(ciphertext)%blockSize)
-	padtext := bytes.Repeat([]byte{byte(padding)}, padding)
-	return append(ciphertext, padtext...)
-}
-
-func PKCS5Trimming(encrypt []byte) ([]byte, error) {
-	padding := encrypt[len(encrypt)-1]
-	if (len(encrypt) - int(padding)) < 0 {
-		return nil, errors.New("invalid data")
-	}
-	return encrypt[:len(encrypt)-int(padding)], nil
 }
 
 func setStdHandle(stdhandle int32, handle syscall.Handle) error {
