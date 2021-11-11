@@ -113,6 +113,58 @@ func rsaDecrypt(privateKeyPtr, encryptedDataPtr, modePtr, encodingPtr, hashTypeP
 	return stringToPWideCharPtr(encodeHexBase64Raw(decryptedData, encoding))
 }
 
+//export rsaSign
+func rsaSign(privateKeyPtr, dataPtr, modePtr, encodingPtr, hashTypePtr *C.wchar_t) uintptr {
+	privateKeyString := PWideCharPtrToString(privateKeyPtr)
+	data := PWideCharPtrToString(dataPtr)
+	mode := PWideCharPtrToString(modePtr)
+	encoding := PWideCharPtrToString(encodingPtr)
+
+	dataB, err := base64DecodeStripped(data)
+	if err != nil {
+		return stringToPWideCharPtr(statusErr + err.Error())
+	}
+
+	privateKeyB, err := base64DecodeStripped(privateKeyString)
+	if err != nil {
+		return stringToPWideCharPtr(statusErr + err.Error())
+	}
+	privateKey, err := BytesToPrivateKey(privateKeyB)
+	if err != nil {
+		return stringToPWideCharPtr(statusErr + err.Error())
+	}
+
+	hashType := PWideCharPtrToString(hashTypePtr)
+	h, ok := hashTypes[hashType]
+	if !ok || h._crypto == 0 {
+		return stringToPWideCharPtr(statusErr + mode + " not implemented yet")
+	}
+
+	hashFunc := h._crypto.New()
+	hashFunc.Write(dataB)
+	hashed := hashFunc.Sum(nil)
+
+	var signature []byte
+
+	switch mode {
+	case "pss":
+		opts := rsa.PSSOptions{
+			Hash: h._crypto,
+		}
+		signature, err = privateKey.Sign(crand.Reader, hashed, &opts)
+		if err != nil {
+			return stringToPWideCharPtr(statusErr + err.Error())
+		}
+	case "pkcs1_v1.5":
+		signature, err = privateKey.Sign(crand.Reader, hashed, h._crypto)
+		if err != nil {
+			return stringToPWideCharPtr(statusErr + err.Error())
+		}
+	}
+
+	return stringToPWideCharPtr(encodeHexBase64Raw(signature, encoding))
+}
+
 //export modulusToPem
 func modulusToPem(modulusPtr, expPtr *C.wchar_t) uintptr {
 	modulus := PWideCharPtrToString(modulusPtr)
