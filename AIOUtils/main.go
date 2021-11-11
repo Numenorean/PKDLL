@@ -309,7 +309,7 @@ func hashHmac(keyPtr, dataPtr, modePtr, encodingPtr, actionPtr *C.wchar_t) uintp
 // mode
 
 //export rsaEncrypt
-func rsaEncrypt(publicKeyPtr, dataPtr, modePtr, encodingPtr, hashTypePtr *C.wchar_t) uintptr {
+func rsaEncrypt(publicKeyPtr, dataPtr, modePtr, encodingPtr, hashTypePtr, labelPtr *C.wchar_t) uintptr {
 	publicKeyString := PWideCharPtrToString(publicKeyPtr)
 	data := PWideCharPtrToString(dataPtr)
 	mode := PWideCharPtrToString(modePtr)
@@ -328,18 +328,22 @@ func rsaEncrypt(publicKeyPtr, dataPtr, modePtr, encodingPtr, hashTypePtr *C.wcha
 	if err != nil {
 		return stringToPWideCharPtr(statusErr + err.Error())
 	}
-	fmt.Println(hex.EncodeToString(publicKey.N.Bytes()), string(dataB), publicKey.E)
 
 	var encryptedData []byte
 
 	switch mode {
-	case "OAEP":
+	case "oaep":
 		hashType := PWideCharPtrToString(hashTypePtr)
 		h, ok := hashTypes[hashType]
 		if !ok {
 			return stringToPWideCharPtr(statusErr + mode + " not implemented yet")
 		}
-		encryptedData, err = rsa.EncryptOAEP(h(), crand.Reader, publicKey, dataB, nil)
+		label := PWideCharPtrToString(labelPtr)
+		labelB, err := base64DecodeStripped(label)
+		if err != nil {
+			return stringToPWideCharPtr(statusErr + err.Error())
+		}
+		encryptedData, err = rsa.EncryptOAEP(h(), crand.Reader, publicKey, dataB, labelB)
 		if err != nil {
 			return stringToPWideCharPtr(statusErr + err.Error())
 		}
@@ -350,15 +354,55 @@ func rsaEncrypt(publicKeyPtr, dataPtr, modePtr, encodingPtr, hashTypePtr *C.wcha
 		}
 	}
 	return stringToPWideCharPtr(encodeHexBase64Raw(encryptedData, encoding))
-
 }
 
-/*
 //export rsaDecrypt
-func rsaDecrypt(privateKeyPtr, dataPtr, modePtr, encodingPtr *C.wchar_t) uintptr {
+func rsaDecrypt(privateKeyPtr, encryptedDataPtr, modePtr, encodingPtr, hashTypePtr, labelPtr *C.wchar_t) uintptr {
+	privateKeyString := PWideCharPtrToString(privateKeyPtr)
+	encryptedData := PWideCharPtrToString(encryptedDataPtr)
+	mode := PWideCharPtrToString(modePtr)
+	encoding := PWideCharPtrToString(encodingPtr)
 
+	encryptedDataB, err := base64DecodeStripped(encryptedData)
+	if err != nil {
+		return stringToPWideCharPtr(statusErr + err.Error())
+	}
+
+	privateKeyB, err := base64DecodeStripped(privateKeyString)
+	if err != nil {
+		return stringToPWideCharPtr(statusErr + err.Error())
+	}
+	privateKey, err := BytesToPrivateKey(privateKeyB)
+	if err != nil {
+		return stringToPWideCharPtr(statusErr + err.Error())
+	}
+
+	var decryptedData []byte
+
+	switch mode {
+	case "oaep":
+		hashType := PWideCharPtrToString(hashTypePtr)
+		h, ok := hashTypes[hashType]
+		if !ok {
+			return stringToPWideCharPtr(statusErr + mode + " not implemented yet")
+		}
+		label := PWideCharPtrToString(labelPtr)
+		labelB, err := base64DecodeStripped(label)
+		if err != nil {
+			return stringToPWideCharPtr(statusErr + err.Error())
+		}
+		decryptedData, err = rsa.DecryptOAEP(h(), crand.Reader, privateKey, encryptedDataB, labelB)
+		if err != nil {
+			return stringToPWideCharPtr(statusErr + err.Error())
+		}
+	case "pkcs1_v1.5":
+		decryptedData, err = rsa.DecryptPKCS1v15(crand.Reader, privateKey, encryptedDataB)
+		if err != nil {
+			return stringToPWideCharPtr(statusErr + err.Error())
+		}
+	}
+	return stringToPWideCharPtr(encodeHexBase64Raw(decryptedData, encoding))
 }
-*/
 
 //export modulusToPem
 func modulusToPem(modulusPtr, expPtr *C.wchar_t) uintptr {
