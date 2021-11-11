@@ -6,9 +6,12 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
+	crand "crypto/rand"
+	"crypto/rsa"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 	"math/rand"
 	"os"
 	"strconv"
@@ -20,7 +23,6 @@ const (
 	author    = "_Skill_"
 	version   = "0.1"
 	desc      = "Большое количество алгоритмов шифрования, функций кодировки и других утилит в одной библиотеке"
-	statusOK  = "OK|"
 	statusErr = "ERR|"
 )
 
@@ -68,7 +70,7 @@ func randNumber(minPtr, maxPtr *C.wchar_t) uintptr {
 	}
 
 	r := rand.Int63n(max-min) + min
-	return stringToPWideCharPtr(statusOK + strconv.FormatInt(r, 10))
+	return stringToPWideCharPtr(strconv.FormatInt(r, 10))
 }
 
 //export base64Decode
@@ -79,7 +81,7 @@ func base64Decode(dataPtr *C.wchar_t) uintptr {
 	if err != nil {
 		return stringToPWideCharPtr(statusErr + err.Error())
 	}
-	return stringToPWideCharPtr(statusOK + string(decodedData))
+	return stringToPWideCharPtr(string(decodedData))
 }
 
 //export hexEncode
@@ -87,7 +89,7 @@ func hexEncode(dataPtr *C.wchar_t) uintptr {
 	data := PWideCharPtrToString(dataPtr)
 
 	encodedData := hex.EncodeToString([]byte(data))
-	return stringToPWideCharPtr(statusOK + string(encodedData))
+	return stringToPWideCharPtr(string(encodedData))
 }
 
 //export hexDecode
@@ -98,7 +100,7 @@ func hexDecode(dataPtr *C.wchar_t) uintptr {
 	if err != nil {
 		return stringToPWideCharPtr(statusErr + err.Error())
 	}
-	return stringToPWideCharPtr(statusOK + string(decodedData))
+	return stringToPWideCharPtr(string(decodedData))
 }
 
 //export hexToBase64
@@ -109,7 +111,7 @@ func hexToBase64(dataPtr *C.wchar_t) uintptr {
 	if err != nil {
 		return stringToPWideCharPtr(statusErr + err.Error())
 	}
-	return stringToPWideCharPtr(statusOK + base64.StdEncoding.EncodeToString(decodedData))
+	return stringToPWideCharPtr(base64.StdEncoding.EncodeToString(decodedData))
 }
 
 //export base64ToHex
@@ -120,7 +122,7 @@ func base64ToHex(dataPtr *C.wchar_t) uintptr {
 	if err != nil {
 		return stringToPWideCharPtr(statusErr + err.Error())
 	}
-	return stringToPWideCharPtr(statusOK + hex.EncodeToString(decodedData))
+	return stringToPWideCharPtr(hex.EncodeToString(decodedData))
 }
 
 // keyPtr, ivPtr, dataPtr, noncePtr/GCM Tag (default - random), tagPtr/Additional Authenticated Data - base64
@@ -203,7 +205,7 @@ func encryptAes(keyPtr, ivPtr, dataPtr, modePtr, encodingPtr, noncePtr, tagPtr *
 		return stringToPWideCharPtr(statusErr + mode + " not implemented yet")
 	}
 
-	return stringToPWideCharPtr(statusOK + encodeHexBase64Raw(encryptedData, encoding))
+	return stringToPWideCharPtr(encodeHexBase64Raw(encryptedData, encoding))
 }
 
 //export decryptAes
@@ -261,7 +263,7 @@ func decryptAes(keyPtr, ivPtr, dataPtr, modePtr, encodingPtr *C.wchar_t) (retPtr
 		return stringToPWideCharPtr(statusErr + mode + " not implemented yet")
 	}
 
-	return stringToPWideCharPtr(statusOK + encodeHexBase64Raw(decryptedData, encoding))
+	return stringToPWideCharPtr(encodeHexBase64Raw(decryptedData, encoding))
 }
 
 //export hashHmac
@@ -301,20 +303,88 @@ func hashHmac(keyPtr, dataPtr, modePtr, encodingPtr, actionPtr *C.wchar_t) uintp
 		return stringToPWideCharPtr(statusErr + "Choose between hash and hmac")
 	}
 
-	return stringToPWideCharPtr(statusOK + encodeHexBase64Raw(hashedData, encoding))
+	return stringToPWideCharPtr(encodeHexBase64Raw(hashedData, encoding))
+}
+
+// mode
+
+//export rsaEncrypt
+func rsaEncrypt(publicKeyPtr, dataPtr, modePtr, encodingPtr, hashTypePtr *C.wchar_t) uintptr {
+	publicKeyString := PWideCharPtrToString(publicKeyPtr)
+	data := PWideCharPtrToString(dataPtr)
+	mode := PWideCharPtrToString(modePtr)
+	encoding := PWideCharPtrToString(encodingPtr)
+
+	dataB, err := base64DecodeStripped(data)
+	if err != nil {
+		return stringToPWideCharPtr(statusErr + err.Error())
+	}
+
+	publicKeyB, err := base64DecodeStripped(publicKeyString)
+	if err != nil {
+		return stringToPWideCharPtr(statusErr + err.Error())
+	}
+	publicKey, err := BytesToPublicKey(publicKeyB)
+	if err != nil {
+		return stringToPWideCharPtr(statusErr + err.Error())
+	}
+	fmt.Println(hex.EncodeToString(publicKey.N.Bytes()), string(dataB), publicKey.E)
+
+	var encryptedData []byte
+
+	switch mode {
+	case "OAEP":
+		hashType := PWideCharPtrToString(hashTypePtr)
+		h, ok := hashTypes[hashType]
+		if !ok {
+			return stringToPWideCharPtr(statusErr + mode + " not implemented yet")
+		}
+		encryptedData, err = rsa.EncryptOAEP(h(), crand.Reader, publicKey, dataB, nil)
+		if err != nil {
+			return stringToPWideCharPtr(statusErr + err.Error())
+		}
+	case "pkcs1_v1.5":
+		encryptedData, err = rsa.EncryptPKCS1v15(crand.Reader, publicKey, dataB)
+		if err != nil {
+			return stringToPWideCharPtr(statusErr + err.Error())
+		}
+	}
+	return stringToPWideCharPtr(encodeHexBase64Raw(encryptedData, encoding))
+
 }
 
 /*
-//export rsaEncrypt
-func rsaEncrypt(publicKeyPtr, dataPtr, modePtr, encodingPtr *C.wchar_t) *C.wchar_t {
-
-}
-
 //export rsaDecrypt
-func rsaDecrypt(privateKeyPtr, dataPtr, modePtr, encodingPtr *C.wchar_t) *C.wchar_t {
+func rsaDecrypt(privateKeyPtr, dataPtr, modePtr, encodingPtr *C.wchar_t) uintptr {
 
 }
+*/
 
+//export modulusToPem
+func modulusToPem(modulusPtr, expPtr *C.wchar_t) uintptr {
+	modulus := PWideCharPtrToString(modulusPtr)
+	exp, err := strconv.Atoi(PWideCharPtrToString(expPtr))
+	if err != nil {
+		return stringToPWideCharPtr(statusErr + err.Error())
+	}
+
+	modulusB, err := base64DecodeStripped(modulus)
+	if err != nil {
+		return stringToPWideCharPtr(statusErr + err.Error())
+	}
+
+	publicKey := rsa.PublicKey{
+		N: new(big.Int).SetBytes(modulusB),
+		E: exp,
+	}
+	pemData, err := PublicKeyToBytes(&publicKey)
+	if err != nil {
+		return stringToPWideCharPtr(statusErr + err.Error())
+	}
+	return stringToPWideCharPtr(string(pemData))
+}
+
+/*
 //export bcryptData
 func bcryptData(dataPtr, rounds, salt *C.wchar_t) *C.wchar_t {
 
