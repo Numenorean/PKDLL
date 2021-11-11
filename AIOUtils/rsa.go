@@ -52,7 +52,7 @@ func rsaEncrypt(publicKeyPtr, dataPtr, modePtr, encodingPtr, hashTypePtr, labelP
 		if err != nil {
 			return stringToPWideCharPtr(statusErr + err.Error())
 		}
-		encryptedData, err = rsa.EncryptOAEP(h(), crand.Reader, publicKey, dataB, labelB)
+		encryptedData, err = rsa.EncryptOAEP(h._hash(), crand.Reader, publicKey, dataB, labelB)
 		if err != nil {
 			return stringToPWideCharPtr(statusErr + err.Error())
 		}
@@ -100,7 +100,7 @@ func rsaDecrypt(privateKeyPtr, encryptedDataPtr, modePtr, encodingPtr, hashTypeP
 		if err != nil {
 			return stringToPWideCharPtr(statusErr + err.Error())
 		}
-		decryptedData, err = rsa.DecryptOAEP(h(), crand.Reader, privateKey, encryptedDataB, labelB)
+		decryptedData, err = rsa.DecryptOAEP(h._hash(), crand.Reader, privateKey, encryptedDataB, labelB)
 		if err != nil {
 			return stringToPWideCharPtr(statusErr + err.Error())
 		}

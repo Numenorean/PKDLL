@@ -23,7 +23,7 @@ func hashHmac(keyPtr, dataPtr, modePtr, encodingPtr, actionPtr *C.wchar_t) uintp
 
 	switch action {
 	case "hash":
-		hashFunc := h()
+		hashFunc := h._hash()
 		hashFunc.Write(dataB)
 		hashedData = hashFunc.Sum(nil)
 	case "hmac":
@@ -33,7 +33,7 @@ func hashHmac(keyPtr, dataPtr, modePtr, encodingPtr, actionPtr *C.wchar_t) uintp
 			return stringToPWideCharPtr(statusErr + err.Error())
 		}
 
-		mac := hmac.New(h, keyB)
+		mac := hmac.New(h._hash, keyB)
 		mac.Write(dataB)
 		hashedData = mac.Sum(nil)
 	default:
