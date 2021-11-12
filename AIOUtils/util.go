@@ -6,57 +6,26 @@ package main
 import "C"
 
 import (
-	"crypto"
-	"crypto/md5"
-	"crypto/sha1"
-	"crypto/sha256"
-	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"hash"
 	"log"
 	"os"
 	"strings"
 	"syscall"
 	"unsafe"
 
-	"golang.org/x/crypto/md4"
-	"golang.org/x/crypto/ripemd160"
-	"golang.org/x/crypto/sha3"
 	"golang.org/x/sys/windows"
 )
 
 var (
 	kernel32         = syscall.MustLoadDLL("kernel32.dll")
 	procSetStdHandle = kernel32.MustFindProc("SetStdHandle")
-	hashTypes        map[string]hashType
 )
 
-type hashType struct {
-	_hash   func() hash.Hash
-	_crypto crypto.Hash
-}
-
 func init() {
-	f, _ := os.OpenFile("paniclog.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, _ := os.OpenFile("C:\\Users\\Skill\\Programs\\Sources\\Golang\\multiload dll\\paniclog.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	redirectStderr(f)
-	hashTypes = map[string]hashType{
-		"md4":            {md4.New, crypto.MD4},
-		"md5":            {md5.New, crypto.MD5},
-		"sha1":           {sha1.New, crypto.SHA1},
-		"sha224":         {sha256.New224, crypto.SHA224},
-		"sha256":         {sha256.New, crypto.SHA256},
-		"sha384":         {sha512.New384, crypto.SHA384},
-		"sha512":         {sha512.New, crypto.SHA512},
-		"sha3-224":       {sha3.New224, crypto.SHA3_224},
-		"sha3-256":       {sha3.New256, crypto.SHA3_256},
-		"sha3-384":       {sha3.New384, crypto.SHA3_384},
-		"sha3-512":       {sha3.New512, crypto.SHA3_512},
-		"sha3-keccak256": {sha3.NewLegacyKeccak256, 0},
-		"sha3-keccak512": {sha3.NewLegacyKeccak512, 0},
-		"ripemd160":      {ripemd160.New, crypto.RIPEMD160},
-	}
 }
 
 func stringToPWideCharPtr(data string) uintptr {
