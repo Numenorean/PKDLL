@@ -6,6 +6,7 @@ package main
 import "C"
 
 import (
+	crand "crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -24,7 +25,7 @@ var (
 )
 
 func init() {
-	f, _ := os.OpenFile("C:\\Users\\Skill\\Programs\\Sources\\Golang\\multiload dll\\paniclog.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, _ := os.OpenFile("C:\\Users\\Skill\\Programs\\Sources\\Golang\\PKDLL\\AIOUtils\\paniclog.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	redirectStderr(f)
 }
 
@@ -133,4 +134,14 @@ func encodeHexBase64Raw(encryptedData []byte, encoding string) string {
 	default:
 		return base64.StdEncoding.EncodeToString(encryptedData)
 	}
+}
+
+func GenerateRandomBytes(n int) ([]byte, error) {
+	b := make([]byte, n)
+	_, err := crand.Read(b)
+	if err != nil {
+		return nil, err
+	}
+
+	return b, nil
 }
