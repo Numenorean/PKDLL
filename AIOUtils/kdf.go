@@ -76,8 +76,5 @@ func scryptPassword(passwordPtr, NPtr, rPtr, pPtr, keyLenPtr, encodingPtr *C.wch
 		return stringToPWideCharPtr(statusErr + err.Error())
 	}
 
-	dataWithSalt := append(hashedData, byte('|'))
-	dataWithSalt = append(dataWithSalt, salt...)
-
-	return stringToPWideCharPtr(encodeHexBase64Raw(dataWithSalt, encoding))
+	return stringToPWideCharPtr(encodeHexBase64Raw(hashedData, encoding) + "|" + encodeHexBase64Raw(salt, encoding))
 }

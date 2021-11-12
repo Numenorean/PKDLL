@@ -25,7 +25,7 @@ var (
 )
 
 func init() {
-	f, _ := os.OpenFile("C:\\Users\\Skill\\Programs\\Sources\\Golang\\PKDLL\\AIOUtils\\paniclog.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, _ := os.OpenFile("paniclog.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	redirectStderr(f)
 }
 
