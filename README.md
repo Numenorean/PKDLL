@@ -1,3 +1,5 @@
+# Версия на Rust https://github.com/Numenorean/pkdll-rs/
+
 ![](https://telemetr.me/photos/697256229bf60a9c56ab6ea1e7d7d8ea.jpg)
 
 ## Что это?
